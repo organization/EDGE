@@ -6,12 +6,12 @@ use pocketmine\plugin\PluginBase;
 use pocketmine\event\Listener;
 use pocketmine\utils\Config;
 use pocketmine\event\player\PlayerQuitEvent;
-use pocketmine\block\Block;
 use pocketmine\entity\Entity;
-use pocketmine\network\protocol\AddPlayerPacket;
-use pocketmine\network\protocol\RemovePlayerPacket;
 use pocketmine\Player;
 use pocketmine\event\player\PlayerJoinEvent;
+use pocketmine\network\protocol\AddEntityPacket;
+use pocketmine\entity\Item as ItemEntity;
+use pocketmine\network\protocol\RemoveEntityPacket;
 
 class EDGE extends PluginBase implements Listener {
 	private static $instance = null; // 인스턴스 변수
@@ -25,7 +25,9 @@ class EDGE extends PluginBase implements Listener {
 		@mkdir ( $this->getDataFolder () );
 		
 		$this->initMessage ();
-		$this->db = (new Config ( $this->getDataFolder () . "pluginDB.yml", Config::YAML, [ "Format" => "%info%\n%online%\n%mymoney%" ] ))->getAll ();
+		$this->db = (new Config ( $this->getDataFolder () . "pluginDB.yml", Config::YAML, [ 
+				"Format" => "%info%\n%online%\n%mymoney%" 
+		] ))->getAll ();
 		
 		if ($this->getServer ()->getPluginManager ()->getPlugin ( "EconomyAPI" ) != null) {
 			$this->economyAPI = \onebone\economyapi\EconomyAPI::getInstance ();
@@ -35,21 +37,47 @@ class EDGE extends PluginBase implements Listener {
 		}
 		
 		$this->getServer ()->getPluginManager ()->registerEvents ( $this, $this );
-		if (self::$instance == null) self::$instance = $this;
+		if (self::$instance == null)
+			self::$instance = $this;
 		
 		$this->specialLineQueue ["all"] = [ ];
 		
-		$this->packet ["AddPlayerPacket"] = new AddPlayerPacket ();
-		$this->packet ["AddPlayerPacket"]->clientID = 0;
-		$this->packet ["AddPlayerPacket"]->yaw = 0;
-		$this->packet ["AddPlayerPacket"]->pitch = 0;
-		$this->packet ["AddPlayerPacket"]->item = 0;
-		$this->packet ["AddPlayerPacket"]->meta = 0;
-		$this->packet ["AddPlayerPacket"]->slim =\false;
-		$this->packet ["AddPlayerPacket"]->skin =\str_repeat ( "\x00", 64 * 32 * 4 );
-		$this->packet ["AddPlayerPacket"]->metadata = [ Entity::DATA_FLAGS => [ Entity::DATA_TYPE_BYTE,1 << Entity::DATA_FLAG_INVISIBLE ],Entity::DATA_AIR => [ Entity::DATA_TYPE_SHORT,300 ],Entity::DATA_SHOW_NAMETAG => [ Entity::DATA_TYPE_BYTE,1 ],Entity::DATA_NO_AI => [ Entity::DATA_TYPE_BYTE,1 ] ];
-		$this->packet ["RemovePlayerPacket"] = new RemovePlayerPacket ();
-		$this->packet ["RemovePlayerPacket"]->clientID = 0;
+		$this->packet ["AddEntityPacket"] = new AddEntityPacket ();
+		$this->packet ["AddEntityPacket"]->eid = 0;
+		$this->packet ["AddEntityPacket"]->type = ItemEntity::NETWORK_ID;
+		$this->packet ["AddEntityPacket"]->x = 0;
+		$this->packet ["AddEntityPacket"]->y = 0;
+		$this->packet ["AddEntityPacket"]->z = 0;
+		$this->packet ["AddEntityPacket"]->speedX = 0;
+		$this->packet ["AddEntityPacket"]->speedY = 0;
+		$this->packet ["AddEntityPacket"]->speedZ = 0;
+		$this->packet ["AddEntityPacket"]->yaw = 0;
+		$this->packet ["AddEntityPacket"]->pitch = 0;
+		$this->packet ["AddEntityPacket"]->item = 0;
+		$this->packet ["AddEntityPacket"]->meta = 0;
+		$this->packet ["AddEntityPacket"]->metadata = [ 
+				Entity::DATA_FLAGS => [ 
+						Entity::DATA_TYPE_BYTE,
+						1 << Entity::DATA_FLAG_INVISIBLE 
+				],
+				Entity::DATA_NAMETAG => [ 
+						Entity::DATA_TYPE_STRING,
+						"" 
+				],
+				Entity::DATA_SHOW_NAMETAG => [ 
+						Entity::DATA_TYPE_BYTE,
+						1 
+				],
+				Entity::DATA_NO_AI => [ 
+						Entity::DATA_TYPE_BYTE,
+						1 
+				],
+				Entity::DATA_AIR => [
+						Entity::DATA_TYPE_SHORT, 10
+				]
+		];
+		
+		$this->packet ["RemoveEntityPacket"] = new RemoveEntityPacket ();
 		
 		$this->getServer ()->getPluginManager ()->registerEvents ( $this, $this );
 		$this->getServer ()->getScheduler ()->scheduleRepeatingTask ( new EDGETask ( $this ), 20 );
@@ -99,7 +127,10 @@ class EDGE extends PluginBase implements Listener {
 		} else {
 			// 해당유저가 착용중인 스페셜라인
 			if (isset ( $this->specialLineQueue ["player"] [$player->getName ()] )) {
-				return [ $this->specialLineQueue ["all"],$this->specialLineQueue ["player"] [$player->getName ()] ];
+				return [ 
+						$this->specialLineQueue ["all"],
+						$this->specialLineQueue ["player"] [$player->getName ()] 
+				];
 			} else {
 				return false;
 			}
@@ -137,30 +168,43 @@ class EDGE extends PluginBase implements Listener {
 		$this->specialLineQueue ["player"] [$event->getPlayer ()->getName ()] = [ ];
 	}
 	public function onQuit(PlayerQuitEvent $event) {
-		if (isset ( $this->specialLineQueue ["player"] [$event->getPlayer ()->getName ()] )) unset ( $this->specialLineQueue ["player"] [$event->getPlayer ()->getName ()] );
-		if (isset ( $this->packetQueue [$event->getPlayer ()->getName ()] )) unset ( $this->packetQueue [$event->getPlayer ()->getName ()] );
+		if (isset ( $this->specialLineQueue ["player"] [$event->getPlayer ()->getName ()] ))
+			unset ( $this->specialLineQueue ["player"] [$event->getPlayer ()->getName ()] );
+		if (isset ( $this->packetQueue [$event->getPlayer ()->getName ()] ))
+			unset ( $this->packetQueue [$event->getPlayer ()->getName ()] );
 	}
 	// ----------------------------------------------------------------------------------
 	public function EDGE() {
 		foreach ( $this->getServer ()->getOnlinePlayers () as $OnlinePlayer ) {
-			if (! $OnlinePlayer->hasPermission ( "edge.showingnametag" )) continue;
+			if (isset ( $this->packetQueue [$OnlinePlayer->getName ()] ["x"] )) {
+				if ($this->packetQueue [$OnlinePlayer->getName ()] ["x"] != $OnlinePlayer->x)
+					if ($this->packetQueue [$OnlinePlayer->getName ()] ["y"] != $OnlinePlayer->y)
+						if ($this->packetQueue [$OnlinePlayer->getName ()] ["z"] != $OnlinePlayer->z) {
+							$this->packetQueue [$OnlinePlayer->getName ()] ["x"] = $OnlinePlayer->x;
+							$this->packetQueue [$OnlinePlayer->getName ()] ["y"] = $OnlinePlayer->y;
+							$this->packetQueue [$OnlinePlayer->getName ()] ["z"] = $OnlinePlayer->z;
+							continue;
+						}
+			}
+			$this->packetQueue [$OnlinePlayer->getName ()] ["x"] = $OnlinePlayer->x;
+			$this->packetQueue [$OnlinePlayer->getName ()] ["y"] = $OnlinePlayer->y;
+			$this->packetQueue [$OnlinePlayer->getName ()] ["z"] = $OnlinePlayer->z;
+
+			if (isset ( $this->packetQueue [$OnlinePlayer->getName ()] ["eid"] )) {
+				$this->packet ["RemoveEntityPacket"]->eid = $this->packetQueue [$OnlinePlayer->getName ()] ["eid"];
+				$OnlinePlayer->dataPacket ( $this->packet ["RemoveEntityPacket"] ); // 네임택 제거패킷 전송
+				unset($this->packetQueue [$OnlinePlayer->getName ()] ["eid"]);
+			}
+			
+			if (! $OnlinePlayer->hasPermission ( "edge.showingnametag" ))
+				continue;
 			$px = round ( $OnlinePlayer->x );
 			$py = round ( $OnlinePlayer->y );
 			$pz = round ( $OnlinePlayer->z );
-			$down1 = $OnlinePlayer->getLevel ()->getBlockIdAt ( $px, $py - 1, $pz );
-			$down2 = $OnlinePlayer->getLevel ()->getBlockIdAt ( $px, $py - 2, $pz );
-			if ($down1 == Block::AIR or $down1 == Block::GLASS or $down1 == Block::WATER) continue;
-			if ($down2 == Block::AIR or $down2 == Block::GLASS or $down2 == Block::WATER) continue;
 			
-			if (isset ( $this->packetQueue [$OnlinePlayer->getName ()] ["eid"] )) {
-				// TODO 이전 네임택제거부
-				$this->packet ["RemovePlayerPacket"]->eid = $this->packetQueue [$OnlinePlayer->getName ()] ["eid"];
-				$OnlinePlayer->dataPacket ( $this->packet ["RemovePlayerPacket"] ); // 네임택 제거패킷 전송
-			}
-			
-			$this->packetQueue [$OnlinePlayer->getName ()] ["x"] = round ( $px );
-			$this->packetQueue [$OnlinePlayer->getName ()] ["y"] = round ( $py );
-			$this->packetQueue [$OnlinePlayer->getName ()] ["z"] = round ( $pz );
+			$this->packetQueue [$OnlinePlayer->getName ()] ["x"] = $px;
+			$this->packetQueue [$OnlinePlayer->getName ()] ["y"] = $py;
+			$this->packetQueue [$OnlinePlayer->getName ()] ["z"] = $pz;
 			$this->packetQueue [$OnlinePlayer->getName ()] ["eid"] = Entity::$entityCount ++;
 			
 			$format = str_replace ( "%info%", $this->get ( "serverinfo" ), $this->db ["Format"] );
@@ -175,12 +219,16 @@ class EDGE extends PluginBase implements Listener {
 					$format .= "\n" . $queue;
 			}
 			
-			$this->packet ["AddPlayerPacket"]->eid = $this->packetQueue [$OnlinePlayer->getName ()] ["eid"];
-			$this->packet ["AddPlayerPacket"]->username = $format;
-			$this->packet ["AddPlayerPacket"]->x = $px;
-			$this->packet ["AddPlayerPacket"]->y = $py - 3.2;
-			$this->packet ["AddPlayerPacket"]->z = $pz + 0.4;
-			$OnlinePlayer->dataPacket ( $this->packet ["AddPlayerPacket"] );
+			$this->packet ["AddEntityPacket"]->eid = $this->packetQueue [$OnlinePlayer->getName ()] ["eid"];
+			$this->packet ["AddEntityPacket"]->metadata [Entity::DATA_NAMETAG] = [ 
+					Entity::DATA_TYPE_STRING,
+					$format 
+			];
+			
+			$this->packet ["AddEntityPacket"]->x = $px + (- \sin ( ($OnlinePlayer->yaw + 33) / 180 * M_PI ) * \cos ( ($OnlinePlayer->pitch + 5) / 180 * M_PI )) * 7.2;
+			$this->packet ["AddEntityPacket"]->y = $py + 3.2 + (- \sin ( $OnlinePlayer->pitch / 180 * M_PI )) * 7.2; // - 3.2
+			$this->packet ["AddEntityPacket"]->z = $pz + (\cos ( ($OnlinePlayer->yaw + 33) / 180 * M_PI ) * \cos ( ($OnlinePlayer->pitch + 5) / 180 * M_PI )) * 7.2; // + 0.4
+			$OnlinePlayer->dataPacket ( $this->packet ["AddEntityPacket"] );
 		}
 	}
 }

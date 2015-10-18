@@ -12,9 +12,9 @@ eng-mymoney: "MYMONEY : "
 
 #(KO) KOREAN
 kor: true
-kor-serverinfo: "< 서버 정보 >"
-kor-usercount: "접속인원 : "
-kor-mymoney: "보유금액 : "
+kor-serverinfo: "§d< 서버 정보 >"
+kor-usercount: "§d접속인원 : §f"
+kor-mymoney: "§d보유금액 : §f"
 
 eng-there-are-no-economyapi: "There are no EconomyAPI! Plugin Stopped!"
 kor-there-are-no-economyapi: "이코노미 API 플러그인이 없습니다 ! 작동정지 !"
